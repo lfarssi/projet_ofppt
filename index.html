@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <link rel="stylesheet" href="bootstrap.min.css">
+  <link rel="stylesheet" href="normalize.css">
+  <style>
+    body {
+      padding: 20px;
+      font-family: Arial, sans-serif;
+    }
+
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 0 10px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+      transition: background-color 0.3s ease;
+    }
+
+    th {
+      background-color: #f9f9f9;
+      font-weight: bold;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      margin-right: 10px;
+    }
+
+    #zoneTable {
+      margin-top: 30px;
+      display: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #zoneTable.show {
+      opacity: 1;
+    }
+
+    #zoneTable table {
+      margin-bottom: 10px;
+    }
+
+    #zoneTable .total {
+      font-weight: bold;
+      margin-top: 10px;
+      text-align: right;
+      font-size: 18px;
+    }
+
+    #addProductBtn {
+      margin-top: 20px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #addProductBtn.show {
+      opacity: 1;
+    }
+
+    @keyframes fade-in {
+      0% {
+        opacity: 0;
+      }
+      100% {
+        opacity: 1;
+      }
+    }
+
+    @keyframes slide-in {
+      0% {
+        transform: translateY(50%);
+        opacity: 0;
+      }
+      100% {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+  </style>
+  <script src="jquery-3.6.0.min.js"></script>
+  <script>
+    $(document).ready(function() {
+      const xmlhttp = new XMLHttpRequest();
+      xmlhttp.onreadystatechange = function() {
+        if (this.readyState === 4 && this.status === 200) {
+          const prods = JSON.parse(this.response);
+          for (const p of prods) {
+            $('#Produit').append(`<option value="${p.prix}">${p.nom}</option>`);
+          }
+        }
+      };
+      xmlhttp.open('GET', 'produits.json');
+      xmlhttp.send();
+
+      const zoneTable = $('#zoneTable');
+      const addProductBtn = $('#addProductBtn');
+
+      $('form :button').eq(0).click(function() {
+        $('form span').remove();
+        $('form select,form input[type=number]').each(function() {
+          $(this).next('span').remove();
+          $(this).removeClass('is-invalid');
+          if (!$(this).val()) {
+            $('<span>').text(`Le champ '${$(this).attr('name')}' est obligatoire !! `)
+              .addClass('text-danger')
+              .insertAfter($(this));
+            $(this).addClass('is-invalid');
+          }
+        });
+
+        if ($('.is-invalid').length) {
+          return;
+        }
+
+        zoneTable.show().addClass('show');
+
+        const nom = $('option:selected').text();
+        const qte = $('#qte').val();
+        const prix = $('select').val();
+        let trouve = false;
+        let oldQte = 0;
+
+        $('tr:gt(0)').each(function() {
+          if ($(this).children('td:first').text() === nom) {
+            const tdQte = $(this).children('td:eq(2)');
+            const tdPrix = $(this).children('td:eq(3)');
+            oldQte = tdQte.data('oldValue');
+            const qteNew = +tdQte.text() + +qte;
+            tdQte.text(qteNew);
+            tdPrix.text(prix * qteNew);
+            tdQte.data('oldValue', qteNew);
+            trouve = true;
+            return;
+          }
+        });
+
+        if (trouve) {
+          return;
+        }
+
+        function updateTotal() {
+          const total = $('#zoneTable tbody tr').get().reduce(function(acc, row) {
+            const montant = +$(row).children('td:eq(3)').text();
+            return acc + montant;
+          }, 0);
+
+          $('#zoneTable .total').text(`Total: ${total.toFixed(2)} EUR`);
+        }
+
+        $('table').append(`
+          <tr>
+            <td>${nom}</td>
+            <td>${prix}</td>
+            <td data-old-value="${qte}">${qte}</td>
+            <td>${qte * prix}</td>
+            <td>
+              <button type="button" class="btn btn-info btn-sm">Modifier</button>
+              <button type="button" class="btn btn-danger btn-sm">Supprimer</button>
+            </td>
+          </tr>
+        `);
+
+        updateTotal();
+
+        $('tr:last :button:nth-child(2)').click(function() {
+          if ($(this).text() === 'Supprimer') {
+            if (confirm('Supprimer ?')) {
+              $(this).parents('tr').remove();
+              if ($('tbody').length <1 ) {
+                zoneTable.hide().removeClass('show');
+                addProductBtn.hide().removeClass('show');
+                updateTotal();
+              }
+              $('[value=Commander]').click();
+            }
+          } else {
+            const prix = $(this).parents('tr').children('td:eq(1)').text();
+            $(this).parent().prev().prev().text(oldQte).next().text(prix * oldQte);
+            $(this).text('Supprimer').prev().text('Modifier');
+          }
+        });
+
+        $('tr:last :button:nth-child(1)').click(function() {
+          const tdQte = $(this).parent().prev().prev();
+          oldQte = tdQte.text();
+
+          if ($(this).text() === 'Modifier') {
+            tdQte.html(`<input type="number" min="1" value=${oldQte} class="form-control form-control-sm">`);
+            $(this).text('OK').next().text('Annuler');
+            const inputQte = tdQte.find('input');
+            inputQte.on('input', function() {
+              if (!inputQte.val()) {
+                inputQte.val(oldQte);
+              }
+              const prix = tdQte.prev().text();
+              tdQte.next().text($(this).val() * prix);
+            });
+          } else {
+            const inputQte = tdQte.find('input');
+            const newQte = inputQte.val();
+
+            if (newQte < 1) {
+              alert('La quantité doit être supérieure ou égale à 1.');
+              return;
+            }
+
+            tdQte.text(newQte);
+
+            const prix = tdQte.prev().text();
+            tdQte.next().text(newQte * prix);
+
+            $(this).text('Modifier').next().text('Supprimer');
+          }
+        });
+
+        const total = $('#zoneTable tr:not(:first-child)').get().reduce(function(acc, row) {
+          const montant = +$(row).children('td:eq(3)').text();
+          return acc + montant;
+        }, 0);
+
+        $('#zoneTable .total').text(`Total: ${total.toFixed(2)} EUR`);
+
+        addProductBtn.show().addClass('show');
+      });
+
+      addProductBtn.click(function() {
+        $('form')[0].reset();
+        $('form select').val('');
+        $('form span').remove();
+        $('form select,form input[type=number]').removeClass('is-invalid');
+        zoneTable.hide().removeClass('show');
+        addProductBtn.hide().removeClass('show');
+      });
+    });
+  </script>
+</head>
+
+<body>
+  <div class="container">
+    <h2 class="text-center">Gestion des commandes</h2>
+    <div class="d-flex justify-content-center">
+      <form>
+        <div class="form-group row">
+          <label for="Produit" class="col-sm col-form-label">Produit</label>
+          <div class="col-sm-10">
+            <select name="Produit" id="Produit" class="form-control form-control-sm-2">
+              <option value="">Sélectionnez un produit</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group row">
+          <label for="qte" class="col-sm col-form-label">Quantité</label>
+          <div class="col-sm-10">
+            <input type="number" min="1" name="qte" id="qte" class="form-control form-control-sm-2">
+          </div>
+        </div>
+        <div class="form-group row">
+          <div class="col-sm-10 offset-sm-2">
+            <button type="button" class="btn btn-primary btn-sm">Commander</button>
+            <button type="reset" class="btn btn-secondary btn-sm">Annuler</button>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div id="zoneTable">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Produit</th>
+            <th>Prix</th>
+            <th>Quantité</th>
+            <th>Montant</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- adding rows dinamique -->
+        </tbody>
+      </table>
+      <div class="total"></div>
+      <button id="addProductBtn" class="btn btn-success btn-sm">Ajouter un produit</button>
+    </div>
+  </div>
+</body>
+
+</html>
